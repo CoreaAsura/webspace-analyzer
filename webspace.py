@@ -1,13 +1,11 @@
-# pip install streamlit skyfield pandas pytz
+# pip install streamlit skyfield pandas pytz geopy
 
 import streamlit as st
 from skyfield.api import EarthSatellite, load, wgs84
 from datetime import timedelta
 from pytz import timezone
 import pandas as pd
-
-SEOUL_LAT = 37.5665
-SEOUL_LON = 126.9780
+from geopy.geocoders import Nominatim
 
 def format_time(dt):
     return dt.strftime("%Y-%m-%d %H:%M:%S")
@@ -21,31 +19,33 @@ def round_val(val):
 def get_horizontal_velocity(sat):
     try:
         v = sat.velocity.km_per_s
-        horiz_vel = (v[0]**2 + v[1]**2)**0.5
-        return round_val(horiz_vel)
+        return round_val((v[0]**2 + v[1]**2)**0.5)
     except:
         return ""
 
-def detect_pass_pairs(name, line1, line2, hours, radius_km):
+def geocode_address(address):
+    geolocator = Nominatim(user_agent="webspace_locator")
+    location = geolocator.geocode(address)
+    if location:
+        return round_val(location.latitude), round_val(location.longitude)
+    else:
+        return None, None
+
+def detect_pass_pairs(name, line1, line2, hours, radius_km, user_lat, user_lon):
     satellite = EarthSatellite(line1, line2, name)
-    seoul = wgs84.latlon(SEOUL_LAT, SEOUL_LON, elevation_m=38)
+    observer = wgs84.latlon(user_lat, user_lon, elevation_m=38)
     ts = load.timescale()
-
-    # ✅ TLE 기준 시간으로 분석 시작
-    now = satellite.epoch
-
+    now = ts.now()
     times = [ts.utc(now.utc_datetime() + timedelta(minutes=i)) for i in range(hours * 60)]
     kst = timezone('Asia/Seoul')
 
-    entries = []
-    exits = []
-    inside = False
+    entries, exits, inside = [], [], False
 
     for t in times:
         try:
             sat_at = satellite.at(t)
-            seoul_pos = seoul.at(t)
-            dist_km = (sat_at - seoul_pos).distance().km
+            obs_pos = observer.at(t)
+            dist_km = (sat_at - obs_pos).distance().km
             sub = sat_at.subpoint()
             lat = round_val(sub.latitude.degrees)
             lon = round_val(sub.longitude.degrees)
@@ -98,14 +98,23 @@ def detect_pass_pairs(name, line1, line2, hours, radius_km):
 
     return results
 
-# Streamlit UI
-st.set_page_config(layout="centered", page_title="🛰️ WebSPACE CSV 분석기")
-st.title("🛰️ WebSPACE | 통합 CSV 분석기")
-st.markdown("모든 위성 이벤트를 하나의 CSV로 분석하고 저장합니다.")
+# 🌐 Streamlit UI
+st.set_page_config(layout="centered", page_title="🛰️ WebSPACE 주소 기반 분석기")
+st.title("🛰️ WebSPACE | 주소 기반 위성 분석기")
+st.markdown("기준 위치를 주소로 입력하면, 해당 위치 주변을 기준으로 위성 통과 이벤트를 분석합니다.")
+
+address = st.text_input("📮 기준 주소 입력 (예: 서울 / 청주시 서원구 성화동)", value="서울")
+lat, lon = geocode_address(address)
+
+if lat is None or lon is None:
+    st.error("❌ 주소를 찾을 수 없습니다. 정확한 지명을 입력해주세요.")
+    st.stop()
+else:
+    st.success(f"✅ 기준 위치 좌표: 위도 {lat}, 경도 {lon}")
 
 tle_text = st.text_area("📄 TLE 입력 (각 위성당 3줄)", height=300)
 col1, col2 = st.columns(2)
-radius_km = col1.slider("📍 서울 반경 (km)", 100, 2000, 1000, step=100)
+radius_km = col1.slider("📍 기준 반경 (km)", 100, 2000, 1000, step=100)
 hours = col2.selectbox("⏱️ 분석 시간 범위 (시간)", [12, 24, 48, 72], index=2)
 
 if st.button("🚀 분석 시작"):
@@ -116,7 +125,7 @@ if st.button("🚀 분석 시작"):
         all_rows = []
         for i in range(0, len(lines), 3):
             name, l1, l2 = lines[i:i+3]
-            rows = detect_pass_pairs(name, l1, l2, hours, radius_km)
+            rows = detect_pass_pairs(name, l1, l2, hours, radius_km, lat, lon)
             all_rows.extend(rows)
 
         df = pd.DataFrame(all_rows, columns=[

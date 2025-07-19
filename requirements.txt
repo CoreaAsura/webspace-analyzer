@@ -1,4 +1,5 @@
-streamlit 
-skyfield 
-pandas 
-pytz 
+streamlit
+skyfield
+pandas
+pytz
+geopy
