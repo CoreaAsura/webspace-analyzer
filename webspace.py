@@ -99,8 +99,8 @@ def detect_pass_pairs(name, line1, line2, hours, radius_km, user_lat, user_lon):
     return results
 
 # 🌐 Streamlit UI
-st.set_page_config(layout="centered", page_title="🛰️ WebSPACE 주소 기반 분석기")
-st.title("🛰️ WebSPACE | 주소 기반 위성 분석기")
+st.set_page_config(layout="centered", page_title="WebSPACE for GREENSTAR")
+st.title("WebSPACE for GREENSTAR")
 st.markdown("기준 위치를 주소로 입력하면, 해당 위치 주변을 기준으로 위성 통과 이벤트를 분석합니다.")
 
 address = st.text_input("📮 기준 주소 입력 (예: 서울 / 청주시 서원구 성화동)", value="서울")
@@ -112,10 +112,10 @@ if lat is None or lon is None:
 else:
     st.success(f"✅ 기준 위치 좌표: 위도 {lat}, 경도 {lon}")
 
-tle_text = st.text_area("📄 TLE 입력 (각 위성당 3줄)", height=300)
+tle_text = st.text_area("궤도정보 / 각 3줄씩 입력 (위성명 + TLE)", height=300)
 col1, col2 = st.columns(2)
-radius_km = col1.slider("📍 기준 반경 (km)", 100, 2000, 1000, step=100)
-hours = col2.selectbox("⏱️ 분석 시간 범위 (시간)", [12, 24, 48, 72], index=2)
+radius_km = col1.slider("📍 기준 반경 (km)", 100, 4000, 1000, step=100)
+hours = col2.selectbox("⏱️ 분석 시간 범위 (시간)", [12, 24, 48, 72, 96, 120, 144, 168], index=2)
 
 if st.button("🚀 분석 시작"):
     lines = [line.strip() for line in tle_text.splitlines() if line.strip()]
