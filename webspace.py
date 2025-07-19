@@ -8,7 +8,6 @@ import pandas as pd
 from geopy.geocoders import Nominatim
 import requests
 
-# 🔍 TLE 자동 검색 함수
 def fetch_tle_by_satname(sat_name):
     url = f"https://celestrak.org/NORAD/elements/gp.php?NAME={sat_name}&FORMAT=tle"
     try:
@@ -27,7 +26,6 @@ def fetch_tle_by_catnr(catnr):
     except:
         return None
 
-# 📍 주소 → 좌표
 def geocode_address(address):
     geolocator = Nominatim(user_agent="webspace_locator")
     location = geolocator.geocode(address)
@@ -36,18 +34,15 @@ def geocode_address(address):
     else:
         return None, None
 
-# ⏱️ 시간 포맷
 def format_time(dt):
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
-# ✨ 소수점 처리
 def round_val(val):
     try:
         return round(val, 3)
     except:
         return ""
 
-# 🛰️ 속도 계산
 def get_horizontal_velocity(sat):
     try:
         v = sat.velocity.km_per_s
@@ -55,7 +50,6 @@ def get_horizontal_velocity(sat):
     except:
         return ""
 
-# 📡 이벤트 분석 함수
 def detect_pass_pairs(name, line1, line2, hours, radius_km, lat, lon):
     satellite = EarthSatellite(line1, line2, name)
     observer = wgs84.latlon(lat, lon, elevation_m=38)
@@ -123,7 +117,7 @@ def detect_pass_pairs(name, line1, line2, hours, radius_km, lat, lon):
 
     return results
 
-# 🌍 Streamlit UI
+# 🎛️ Streamlit UI
 st.set_page_config(layout="centered", page_title="🛰️ WebSPACE for GREENSTAR")
 st.title("🛰️ WebSPACE for GREENSTAR")
 st.markdown("주소를 기준으로 위성 통과 이벤트를 분석하고 CSV로 저장합니다.")
@@ -137,36 +131,46 @@ if lat is None or lon is None:
 else:
     st.success(f"✅ 기준 위치 좌표: 위도 {lat}, 경도 {lon}")
 
-# 🔍 TLE 자동 불러오기
-st.markdown("### 🔍 TLE 자동 불러오기")
+# 🛰️ TLE 자동 수집
+st.markdown("### 🔍 궤도정보 자동 추가")
 mode = st.radio("검색 방식", ["위성명", "NORAD 번호"])
 query = st.text_input("🔎 위성명 또는 NORAD 번호 입력", value="")
-if st.button("TLE 자동 가져오기"):
+
+if "tle_list" not in st.session_state:
+    st.session_state.tle_list = []
+
+if st.button("TLE 가져와서 추가"):
     if mode == "위성명":
         tle_data = fetch_tle_by_satname(query)
     else:
         tle_data = fetch_tle_by_catnr(query)
 
     if tle_data:
-        st.success("✅ TLE 정보가 성공적으로 불러와졌습니다!")
-        st.session_state.tle_text = tle_data
+        st.session_state.tle_list.append(tle_data)
+        st.success("✅ TLE 추가 완료!")
     else:
-        st.error("❌ 해당 위성을 찾을 수 없습니다. 정확히 입력해주세요.")
+        st.error("❌ TLE를 찾을 수 없습니다. 위성명을 정확히 입력해주세요.")
 
-# 📄 TLE 직접 입력
-tle_text = st.text_area("궤도정보 / 각 3줄씩 입력 (위성명 + TLE)", value=st.session_state.get("tle_text", ""), height=300)
+if st.session_state.tle_list:
+    st.markdown("📄 현재 등록된 TLE 목록:")
+    for i, tle in enumerate(st.session_state.tle_list):
+        st.code(tle, language="text")
+
 col1, col2 = st.columns(2)
 radius_km = col1.slider("📍 기준 반경 (km)", min_value=100, max_value=4000, value=1000, step=100)
 hours = col2.selectbox("⏱️ 분석 시간 범위 (시간)", options=[12, 24, 48, 72, 96, 120, 144, 168], index=3)
 
 if st.button("🚀 분석 시작"):
-    lines = [line.strip() for line in tle_text.splitlines() if line.strip()]
-    if len(lines) % 3 != 0:
-        st.error("❌ TLE 입력 오류: 위성당 3줄씩 구성되어야 합니다.")
+    if not st.session_state.tle_list:
+        st.error("❌ TLE가 하나도 등록되지 않았습니다.")
     else:
         all_rows = []
-        for i in range(0, len(lines), 3):
-            name, l1, l2 = lines[i:i+3]
+        for tle_text in st.session_state.tle_list:
+            lines = [line.strip() for line in tle_text.splitlines() if line.strip()]
+            if len(lines) != 3:
+                st.warning("⚠️ 잘못된 TLE 항목이 있어 건너뜁니다.")
+                continue
+            name, l1, l2 = lines
             rows = detect_pass_pairs(name, l1, l2, hours, radius_km, lat, lon)
             all_rows.extend(rows)
 
